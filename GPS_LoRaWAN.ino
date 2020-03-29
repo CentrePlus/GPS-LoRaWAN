@@ -17,8 +17,9 @@ Adafruit_GPS GPS(&GPSSERIAL);
 
 
 uint32_t timer = millis();
+int timeBetweenReads = 10000;
 
-uint8_t mydata[12];
+uint8_t mydata[15];
 
 bool dataSent = false;
 
@@ -26,6 +27,12 @@ union {
     float a;
     unsigned char bytes[4];
 } coord;
+
+union {
+    int a;
+    unsigned char bytes[2];
+} Speed ;
+
 
 
 void loraInit(){
@@ -60,10 +67,32 @@ void loop() {
             return;
     }
 
-    if (millis() - timer > 10000)    {
-        timer = millis();
-        if (GPS.fix)        {
-            coord.a = GPS.latitude;
+    if (millis() - timer > timeBetweenReads) {
+        Serial.print("\nTime: ");
+        Serial.print(GPS.hour, DEC); Serial.print(':');
+        Serial.print(GPS.minute, DEC); Serial.print(':');
+        Serial.print(GPS.seconds, DEC); Serial.print('.');
+        Serial.println(GPS.milliseconds);
+        Serial.print("Date: ");
+        Serial.print(GPS.day, DEC); Serial.print('/');
+        Serial.print(GPS.month, DEC); Serial.print("/20");
+        Serial.println(GPS.year, DEC);
+        Serial.print("Fix: "); Serial.print((int)GPS.fix);
+        Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+
+        if (GPS.fix) {
+
+            Serial.print("Location: ");
+            Serial.print(GPS.latitude, 6); Serial.print(GPS.lat);
+            Serial.print(", ");
+            Serial.print(GPS.longitude, 6); Serial.println(GPS.lon);
+            Serial.print("Speed (knots): "); Serial.println(GPS.speed);
+            Serial.print("Angle: "); Serial.println(GPS.angle);
+            Serial.print("Altitude: "); Serial.println(GPS.altitude);
+            Serial.print("Satellites: "); Serial.println((int)GPS.satellites);
+
+            coord.a = GPS.latitude * 1000;
+            if (GPS.lat == 'S') { coord.a = coord.a * -1; }
             mydata[0] = coord.bytes[0];
             mydata[1] = coord.bytes[1];
             mydata[2] = coord.bytes[2];
@@ -71,7 +100,7 @@ void loop() {
 
             Serial.print("Lat ");
             Serial.println(coord.a);
-                        
+
             //Serial.print(" B0 ");
             //Serial.print(coord.bytes[0]);
             //Serial.print(" B1 ");
@@ -81,7 +110,8 @@ void loop() {
             //Serial.print(" B3 ");
             //Serial.println(coord.bytes[3]);
 
-            coord.a = GPS.longitude;
+            coord.a = GPS.longitude * 1000;
+            if (GPS.lon == 'W') { coord.a = coord.a * -1; }
 
             mydata[4] = coord.bytes[0];
             mydata[5] = coord.bytes[1];
@@ -93,7 +123,6 @@ void loop() {
 
             coord.a = GPS.altitude;
 
-
             mydata[8] = coord.bytes[0];
             mydata[9] = coord.bytes[1];
             mydata[10] = coord.bytes[2];
@@ -102,31 +131,45 @@ void loop() {
             Serial.print("Alt ");
             Serial.println(coord.a);
 
-            dataSent = false;
+            Speed.a = GPS.speed;
 
-            LMIC_setTxData2(1, mydata, sizeof(mydata), 0);
+            mydata[12] = Speed.bytes[0];
+            mydata[13] = Speed.bytes[1];
 
-            Serial.println("sending ...");
+            mydata[14] = GPS.satellites;
 
-            int Cnt = 0;
-            while (!dataSent)            {
-                os_runloop_once();
-                delay(1);
+            sendData();
 
-                if (Cnt > 1000) {
-                    Serial.print("Freq ");
-                    Serial.print(LMIC.freq);
-                    Serial.print(", Mills ");
-                    Serial.println(millis());
-                    Cnt = 0;
-                }
-                Cnt = Cnt + 1;
-            }
-
-            Serial.println("PayLoad Sent");
+            timer = millis();
         }
     }
+    
 }
+
+boolean sendData() {
+    dataSent = false;
+    Serial.println("sending ...");
+
+    LMIC_setTxData2(1, mydata, sizeof(mydata), 0);
+
+    int Cnt = 0;
+    while (!dataSent) {
+        os_runloop_once();
+        delay(1);
+
+        if (Cnt > 1000) {
+            Serial.print("Freq ");
+            Serial.print(LMIC.freq);
+            Serial.print(", Mills ");
+            Serial.println(millis());
+            Cnt = 0;
+        }
+        Cnt = Cnt + 1;
+    }
+
+    Serial.println("PayLoad Sent");
+}
+
 
 void onEvent(ev_t ev) {
     Serial.print(os_getTime());
