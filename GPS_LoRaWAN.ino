@@ -10,6 +10,8 @@
 #include <SPI.h>
 #include "LoRa-otaa.h"
 #define GPSSERIAL Serial1
+#define VBATPIN A7
+
 
 Adafruit_GPS GPS(&GPSSERIAL);
 
@@ -19,7 +21,7 @@ Adafruit_GPS GPS(&GPSSERIAL);
 uint32_t timer = millis();
 int timeBetweenReads = 10000;
 
-uint8_t mydata[15];
+uint8_t mydata[19];
 
 bool dataSent = false;
 
@@ -33,6 +35,10 @@ union {
     unsigned char bytes[2];
 } Speed ;
 
+union {
+    float a;
+    unsigned char bytes[4];
+}Voltage;
 
 
 void loraInit(){
@@ -79,6 +85,7 @@ void loop() {
         Serial.println(GPS.year, DEC);
         Serial.print("Fix: "); Serial.print((int)GPS.fix);
         Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
+        Serial.print("Battery: "); Serial.println(batteryVoltage());
 
         if (GPS.fix) {
 
@@ -138,10 +145,19 @@ void loop() {
 
             mydata[14] = GPS.satellites;
 
+            Voltage.a = batteryVoltage();
+            mydata[15] = Voltage.bytes[0];
+            mydata[16] = Voltage.bytes[1];
+            mydata[17] = Voltage.bytes[2];
+            mydata[18] = Voltage.bytes[3];
+
+            Serial.print("Bat Volt ");
+            Serial.println(Voltage.a);
+
             sendData();
 
-            timer = millis();
         }
+        timer = millis();
     }
     
 }
@@ -168,6 +184,14 @@ boolean sendData() {
     }
 
     Serial.println("PayLoad Sent");
+}
+
+float batteryVoltage() {
+    float measuredvbat = analogRead(VBATPIN);
+    measuredvbat *= 2; //double 100K resistor on Bat pin, So multiply back.
+    measuredvbat *= 3.3; //3.3 is referance voltage.
+    measuredvbat /= 1024; //Convert to voltage.
+    return measuredvbat;
 }
 
 
